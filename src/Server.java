@@ -97,17 +97,14 @@ public class Server {
 	}
 
 	class BlueMarbleThread extends Thread {
-
+		DBConn dbConn = new DBConn();
 		String msg;
 		String[] rmsg;
-		Connection con = null;
-		PreparedStatement psmt = null;
-		ResultSet rs = null;
-		String ready = null;
 		private BufferedReader inMsg = null;
 		private PrintWriter outMsg = null;
 		Player myPlayer = null;
 		BlueMarbleThread yourPlayer = null;
+		String ready = null;
 
 		public void run() {
 
@@ -129,82 +126,38 @@ public class Server {
 						if (rmsg[0].equals("Login")) {
 							System.out.println(Thread.currentThread());
 							String sql = rmsg[1];
-							try {
-								con = DBConn.getConnection();
-							} catch (SQLException e) {
-								e.printStackTrace();
-							}
-
-							try {
-								psmt = con.prepareStatement(sql);
-								rs = psmt.executeQuery();
-								System.out.println(rs);
-								if (!rs.next()) {
-									tmsg = "Error";
-									msgSend(tmsg, BlueMarbleThread.this);
-								} else {
-									tmsg = rs.getString(1) + "/" + rs.getInt(2) + "/" + rs.getInt(3);
-									myPlayer = new Player(rs.getString(1), rs.getInt(2), rs.getInt(3));
-									msgSend(tmsg, BlueMarbleThread.this);
-								}
-							} catch (SQLException ex) {
-								System.err.println(ex.getMessage());
-							}
-
+							dbWork(rmsg[0], sql, tmsg);	
 						} else if (rmsg[0].equals("Signup")) {
 							String sql = rmsg[1];
-							try {
-								con = DBConn.getConnection();
-								Statement state = con.createStatement();
-								int rs = state.executeUpdate(sql);
-
-							} catch (SQLException e) {
-								e.printStackTrace();
-							}
+							dbWork(rmsg[0], sql, tmsg);
 						} else if (rmsg[0].equals("GameResult")) {
 							String winsql = "UPDATE member SET win = win+1 where id = '" + rmsg[1] + "'";
 							String losesql = "UPDATE member SET lose = lose+1 where id = '" + rmsg[2] + "'";
 							System.out.println("승리자:" + rmsg[1] + ",루저:" + rmsg[2]);
-							try {
-								con = DBConn.getConnection();
-								Statement state = con.createStatement();
-								state.executeUpdate(winsql);
-								state.executeUpdate(losesql);
-							} catch (SQLException e) {
-								e.printStackTrace();
-							}
+							dbWork(rmsg[0], winsql, tmsg);
+							dbWork(rmsg[0], losesql, tmsg);
 							msgSend(msg, yourPlayer);
 							yourPlayer.yourPlayer = null;
 							yourPlayer = null;
 						} else if (rmsg[0].equals("Ready")) {
 							ready = rmsg[1];
 							player.offer(BlueMarbleThread.this);
-						} else if (rmsg[0].equals("GameFinish")) {// SocketConnect.getOutMsg().println("Giveup/"+myName.getText().toString()+"/"+yourName.getText().toString());
-							if (ready != null) {
-								player.poll();
-							}
+						} else if (rmsg[0].equals("GameFinish")) {// SocketConnect.getOutMsg().println("Giveup/"+myName.getText().toString()+"/"+yourName.getText().toString());							
 							status = false;
 						} else if (rmsg[0].equals("ChangeTurn") || rmsg[0].equals("removeFlag")) {
 							msgSend(msg, yourPlayer);
 							msgSend(msg, BlueMarbleThread.this);
 						} else if (rmsg[0].equals("CheckMatching")) {
-							if (yourPlayer == null) {
-								if (ready != null) {
-									player.poll();
-								}
+							if (yourPlayer == null) {								
 								status = false;
 							} else {
-								String winsql = "UPDATE member SET win = win+1 where id = '"+ yourPlayer.myPlayer.username + "'";
-								String losesql = "UPDATE member SET lose = lose+1 where id = '" + myPlayer.username+ "'";
+								String winsql = "UPDATE member SET win = win+1 where id = '"
+										+ yourPlayer.myPlayer.username + "'";
+								String losesql = "UPDATE member SET lose = lose+1 where id = '" + myPlayer.username
+										+ "'";
 								System.out.println("승리자:" + yourPlayer.myPlayer.username + ",루저:" + myPlayer.username);
-								try {
-									con = DBConn.getConnection();
-									Statement state = con.createStatement();
-									state.executeUpdate(winsql);
-									state.executeUpdate(losesql);
-								} catch (SQLException e) {
-									e.printStackTrace();
-								}
+								dbWork(rmsg[0], winsql, tmsg);
+								dbWork(rmsg[0], losesql, tmsg);
 								tmsg = "GameResult/" + yourPlayer.myPlayer.username + "/" + myPlayer.username;
 								msgSend(tmsg, yourPlayer);
 								yourPlayer.yourPlayer = null;
@@ -213,47 +166,61 @@ public class Server {
 							}
 						} else if (rmsg[0].equals("FindPW")) {
 							String sql = rmsg[1];
-							try {
-								con = DBConn.getConnection();
-							} catch (SQLException e) {
-								e.printStackTrace();
-							}
-
-							try {
-								psmt = con.prepareStatement(sql);
-								rs = psmt.executeQuery();
-								tmsg = "";
-								System.out.println(rs);
-								if (!rs.next()) {
-									tmsg = "FindPW/NotFound";
-								} else {
-									tmsg = "FindPW/" + rs.getString(1);
-									// player.offer(new Player(rs.getString(1), rs.getInt(2), rs.getInt(3)));
-									System.out.println("pw>>>>>" + tmsg);
-								}
-								msgSend(tmsg, BlueMarbleThread.this);
-							} catch (SQLException ex) {
-								System.err.println(ex.getMessage());
-							}
-						} else {
-							System.out.println("1: " + yourPlayer);
+							dbWork(rmsg[0], sql, tmsg);							
+						} else {							
 							msgSend(msg, yourPlayer);
 						}
 						msg = null;
 					}
 				}
-
-				con.close();
-				psmt.close();
-				rs.close();
+				if (ready != null) {
+					player.poll();
+				}
 				playerThreads.remove(this);
 				this.interrupt();
-
 				System.out.println("##" + this.getName() + "stop!!");
-			} catch (IOException e) {
 
+			} catch (IOException e) {
+				playerThreads.remove(this);
 				System.out.println("[ChatThread]run() IOException 발생!!");
-			} catch (SQLException e) {
+			}
+		}
+
+		public void dbWork(String menu, String sql, String tmsg) {
+			try {
+				dbConn.connectDB();
+				switch (menu) {
+
+				case "Login":
+					dbConn.rs = dbConn.state.executeQuery(sql);
+					if (!dbConn.rs.next()) {
+						tmsg = "Error";						
+					} else {
+						tmsg = dbConn.rs.getString(1) + "/" + dbConn.rs.getInt(2) + "/" + dbConn.rs.getInt(3);
+						myPlayer = new Player(dbConn.rs.getString(1), dbConn.rs.getInt(2), dbConn.rs.getInt(3));
+					}
+					msgSend(tmsg, BlueMarbleThread.this);
+					break;
+
+				case "FindPW":
+					dbConn.rs = dbConn.state.executeQuery(sql);
+					tmsg = "";
+					System.out.println(dbConn.rs);
+					if (!dbConn.rs.next()) {
+						tmsg = "FindPW/NotFound";
+					} else {
+						tmsg = "FindPW/" + dbConn.rs.getString(1);
+						System.out.println("pw>>>>>" + tmsg);
+					}
+					msgSend(tmsg, BlueMarbleThread.this);
+					break;
+				default:
+					dbConn.state.executeUpdate(sql);
+					break;
+				}
+				dbConn.disconnectDB();
+			} catch (Exception e) {
+				System.err.println(e.getMessage());
 			}
 		}
 	}
