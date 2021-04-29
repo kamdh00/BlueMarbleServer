@@ -8,7 +8,7 @@ import java.sql.Statement;
 public class DBConn{
 	String url = "jdbc:mysql://localhost/bluemable";
     String id = "root";
-    String password = "1234";
+    String password = "root";
 
     ResultSet rs = null;
     Connection con = null;

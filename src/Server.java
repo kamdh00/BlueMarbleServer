@@ -1,14 +1,12 @@
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -32,12 +30,25 @@ public class Server {
 	int cnt = 0;
 	Queue<BlueMarbleThread> player = new LinkedList<>();
 	ArrayList<BlueMarbleThread> playerThreads = new ArrayList<BlueMarbleThread>();
+	
+	LoggerMsg loggerMsg = null;
+	LocalDateTime ldt = LocalDateTime.now();
+	File dir = new File("C:/bluemarble/log");
 
 	public void start() {
-		try {
-
+		if(!dir.exists()) {
+			dir.mkdirs();
+			System.out.println("디렉토리 생성!!");
+		}
+		 
+		String filename = "log_"+LocalDate.now()+".log"; 
+		loggerMsg = new LoggerMsg(dir+"/"+filename);
+		try {			
 			ss = new ServerSocket(8888);
 			System.out.println("server start");
+			loggerMsg.log("server start");
+			loggerMsg.close();
+			
 			machtingPlayer();
 			while (true) {
 				s = ss.accept();
@@ -107,9 +118,11 @@ public class Server {
 		String ready = null;
 
 		public void run() {
-
+			String filename = "log_"+LocalDate.now()+".log"; 
+			loggerMsg = new LoggerMsg(dir+"/"+filename);
 			boolean status = true;
 			System.out.println("##ChatThread start...");
+			loggerMsg.log("##ChatThread start...");
 			try {
 
 				inMsg = new BufferedReader(new InputStreamReader(s.getInputStream()));
@@ -134,6 +147,7 @@ public class Server {
 							String winsql = "UPDATE member SET win = win+1 where id = '" + rmsg[1] + "'";
 							String losesql = "UPDATE member SET lose = lose+1 where id = '" + rmsg[2] + "'";
 							System.out.println("승리자:" + rmsg[1] + ",루저:" + rmsg[2]);
+							loggerMsg.log("승리자:" + rmsg[1] + ",루저:" + rmsg[2]);
 							dbWork(rmsg[0], winsql, tmsg);
 							dbWork(rmsg[0], losesql, tmsg);
 							msgSend(msg, yourPlayer);
@@ -144,6 +158,8 @@ public class Server {
 							player.offer(BlueMarbleThread.this);
 						} else if (rmsg[0].equals("GameFinish")) {// SocketConnect.getOutMsg().println("Giveup/"+myName.getText().toString()+"/"+yourName.getText().toString());							
 							status = false;
+							loggerMsg.log("게임 종료!!");
+							loggerMsg.close();
 						} else if (rmsg[0].equals("ChangeTurn") || rmsg[0].equals("removeFlag")) {
 							msgSend(msg, yourPlayer);
 							msgSend(msg, BlueMarbleThread.this);
@@ -156,6 +172,7 @@ public class Server {
 								String losesql = "UPDATE member SET lose = lose+1 where id = '" + myPlayer.username
 										+ "'";
 								System.out.println("승리자:" + yourPlayer.myPlayer.username + ",루저:" + myPlayer.username);
+								loggerMsg.log("승리자:\" + yourPlayer.myPlayer.username + \",루저:\" + myPlayer.username");
 								dbWork(rmsg[0], winsql, tmsg);
 								dbWork(rmsg[0], losesql, tmsg);
 								tmsg = "GameResult/" + yourPlayer.myPlayer.username + "/" + myPlayer.username;
@@ -179,14 +196,19 @@ public class Server {
 				playerThreads.remove(this);
 				this.interrupt();
 				System.out.println("##" + this.getName() + "stop!!");
-
+				loggerMsg.log("##" + this.getName() + "stop!!");
+				loggerMsg.close();
 			} catch (IOException e) {
 				playerThreads.remove(this);
 				System.out.println("[ChatThread]run() IOException 발생!!");
+				loggerMsg.log("[ChatThread]run() IOException 발생!!");
+				loggerMsg.close();
 			}
 		}
 
-		public void dbWork(String menu, String sql, String tmsg) {
+		public void dbWork(String menu, String sql, String tmsg) {			
+			String filename = "log_"+LocalDate.now()+".log"; 
+			loggerMsg = new LoggerMsg(dir+"/"+filename);
 			try {
 				dbConn.connectDB();
 				switch (menu) {
@@ -199,6 +221,8 @@ public class Server {
 						tmsg = dbConn.rs.getString(1) + "/" + dbConn.rs.getInt(2) + "/" + dbConn.rs.getInt(3);
 						myPlayer = new Player(dbConn.rs.getString(1), dbConn.rs.getInt(2), dbConn.rs.getInt(3));
 					}
+					loggerMsg.log(myPlayer+"님 로그인.");
+					loggerMsg.close();
 					msgSend(tmsg, BlueMarbleThread.this);
 					break;
 
@@ -206,12 +230,14 @@ public class Server {
 					dbConn.rs = dbConn.state.executeQuery(sql);
 					tmsg = "";
 					System.out.println(dbConn.rs);
+					loggerMsg.log(dbConn.rs.getString(1)+" 패스워드 찾기 시도");
+					loggerMsg.close();
 					if (!dbConn.rs.next()) {
 						tmsg = "FindPW/NotFound";
 					} else {
 						tmsg = "FindPW/" + dbConn.rs.getString(1);
 						System.out.println("pw>>>>>" + tmsg);
-					}
+					}					
 					msgSend(tmsg, BlueMarbleThread.this);
 					break;
 				default:
@@ -221,6 +247,8 @@ public class Server {
 				dbConn.disconnectDB();
 			} catch (Exception e) {
 				System.err.println(e.getMessage());
+				loggerMsg.log("로그인 Exception : "+ e.getMessage());
+				loggerMsg.close();
 			}
 		}
 	}
